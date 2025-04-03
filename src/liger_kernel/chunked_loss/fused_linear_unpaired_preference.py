@@ -98,6 +98,7 @@ class LigerFusedLinearUnpairedPreferenceBase(torch.autograd.Function):
             Fused forward and backward pass for a chunk of input and target.
             """
             argnums = (0, 1, 4) if bias is not None else (0, 1)
+            print("weight", weight)
             return torch.func.grad_and_value(compute_loss, argnums=argnums, has_aux=True)(
                 input_chunk,
                 weight,
@@ -131,6 +132,9 @@ class LigerFusedLinearUnpairedPreferenceBase(torch.autograd.Function):
 
             # Accumulate gradients
             grad_weight.add_(chunk_grad_weight)
+            print("grad_weight111", grad_weight.shape)
+            print("grad_weight111222", grad_weight)
+
             grad_inputs.append(chunk_grad_input)
 
             # Accumulate loss
@@ -167,6 +171,7 @@ class LigerFusedLinearUnpairedPreferenceBase(torch.autograd.Function):
         if use_ref_model:
             _ref_input_chunks = torch.chunk(ref_input, chunks=chunks, dim=0)
 
+        chunk_num = 0
         for (
             input_chunk,
             target_chunk,
@@ -187,11 +192,16 @@ class LigerFusedLinearUnpairedPreferenceBase(torch.autograd.Function):
 
             # accumulate loss, gradients, and metrics
             accumulate_chunk(input_chunk, target_chunk, preference_labels_chunk, ref_input_chunk)
+            chunk_num += 1
 
         # Aggregate aux outputs lists into tensors
         for i, aux in enumerate(aggregated_aux_outputs):
             if isinstance(aux, list):
                 aggregated_aux_outputs[i] = torch.cat(aux, dim=0)
+
+        loss_acc.div_(chunk_num)
+        grad_weight.div_(chunk_num)
+        grad_bias.div_(chunk_num)
 
         ctx.save_for_backward(
             torch.cat(grad_inputs, dim=0),
@@ -210,11 +220,18 @@ class LigerFusedLinearUnpairedPreferenceBase(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, *grad_output):
+
         grad_input, grad_weight, grad_bias = ctx.saved_tensors
+
+        print(grad_output[0])
+        print(type(grad_output[0][0]))
         if torch.ne(grad_output[0][0], torch.tensor(1.0, device=grad_output[0][0].device)):
-            grad_input = grad_input * grad_output[0][0]
-            grad_weight = grad_weight * grad_output[0][0]
-            grad_bias = grad_bias * grad_output[0][0] if grad_bias is not None else None
+            # grad_input = grad_input * grad_output[0][0]
+            # grad_weight = grad_weight * grad_output[0][0]
+            # grad_bias = grad_bias * grad_output[0][0] if grad_bias is not None else None
+            grad_input = grad_output[0][0] @ grad_weight           # ∂L/∂x
+            grad_weight = grad_output[0][0].T @ grad_input         # ∂L/∂W
+            # grad_bias = grad_output.sum(dim=0)          # ∂L/∂b
 
         return grad_input, grad_weight, None, None, grad_bias
 
@@ -236,16 +253,41 @@ class LigerFusedLinearUnpairedPreferenceBase(torch.autograd.Function):
         label_chunk = torch.where(loss_mask_chunk, target_chunk, 0)
 
         per_token_logps_chunk = log_probs_chunk.gather(-1, label_chunk.unsqueeze(-1)).squeeze(-1)
-        if average_log_prob:
-            log_probs = (per_token_logps_chunk * loss_mask_chunk).sum(-1) / loss_mask_chunk.sum(-1)
-        else:
-            log_probs = (per_token_logps_chunk * loss_mask_chunk).sum(-1)
+        # token-level
+        log_probs = per_token_logps_chunk * loss_mask_chunk
+        
+        # print("chunk_forward_log_probs", log_probs)
+        # max_val = log_probs.max()
+        # print("max_val", max_val)
+        # if(max_val > 0):
+        #     print("kkkkkkkkkkkkkk")
 
+        # if torch.any(log_probs > 0):
+        #     print("Detected log_probs > 0!")
+        #     print("log_probs shape:", log_probs.shape)
+        #     print("log_probs max value:", log_probs.max().item())
+        #     print("Full log_probs tensor:")
+        #     print(log_probs)
+        # if average_log_prob:
+        #     log_probs = (per_token_logps_chunk * loss_mask_chunk).sum(-1) / loss_mask_chunk.sum(-1)
+        # else:
+        #     log_probs = (per_token_logps_chunk * loss_mask_chunk).sum(-1)
+
+        # chosen_logps_sum = (log_probs * preference_labels_chunk.unsqueeze(1)).sum()
+        # rejected_logps_sum = (log_probs * (~preference_labels_chunk).unsqueeze(1)).sum()
+
+        # token-level
         chosen_logps_sum = (log_probs * preference_labels_chunk.unsqueeze(1)).sum()
         rejected_logps_sum = (log_probs * (~preference_labels_chunk).unsqueeze(1)).sum()
 
-        chosen_logits_sum = (logits_chunk * preference_labels_chunk.unsqueeze(1)).sum()
-        rejected_logits_sum = (logits_chunk * (~preference_labels_chunk).unsqueeze(1)).sum()
+        # print(log_probs.shape)
+        # print(preference_labels_chunk.shape)
+        # print(logits_chunk.shape)
+
+
+        chosen_logits_sum = (logits_chunk * preference_labels_chunk.unsqueeze(1).unsqueeze(2)).sum()
+        rejected_logits_sum = (logits_chunk * (~preference_labels_chunk).unsqueeze(1).unsqueeze(2)).sum()
+
 
         return (
             log_probs,
