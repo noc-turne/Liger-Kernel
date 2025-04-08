@@ -35,56 +35,27 @@ class LigerFusedLinearPPOFunction(LigerFusedLinearUnpairedPreferenceBase):
             - rejected_rewards_sum: Sum of (ratio * advantage) for rejected samples (not returned)
         """
 
-        # print(average_log_prob_chunk.shape)
-        # print(average_log_prob_chunk)
-        # ratio = exp(new_log_prob - old_log_prob)
-        # print("log_prob_chunk:", log_prob_chunk.shape)
-        # print("log_prob_chunk_value:", log_prob_chunk)
-        # print("ref_prob_chunk:", ref_log_prob_chunk)
         if ref_log_prob_chunk is not None:
             ratio_chunk = torch.exp(log_prob_chunk - ref_log_prob_chunk)
         else:
             # If no reference is provided, treat the ratio as exp(log_prob_chunk)
             ratio_chunk = torch.exp(log_prob_chunk)
 
-        # print("ratio_chunk:", ratio_chunk)
-
         # Advantage is +1 if chosen, -1 if rejected
         advantage_chunk = torch.where(preference_labels_chunk, 1.0, -0.01).unsqueeze(-1)
 
-        # print("advantage_chunk", advantage_chunk)
-
         # Unclipped objective
         obj_unclipped = ratio_chunk * advantage_chunk
-        # print("obj_unclipped", obj_unclipped)
 
         # Clipped objective
         ratio_clipped = torch.clamp(ratio_chunk, 1.0 - beta, 1.0 + beta)
-        # print("ratio_clipped", ratio_clipped)
+
         obj_clipped = ratio_clipped * advantage_chunk
-        # print("obj_clipped", obj_clipped)
 
         # PPO's clipped loss: - min(obj_unclipped, obj_clipped)
         # negative sign because we usually maximize PPO objective
         losses = -torch.minimum(obj_unclipped, obj_clipped)
 
-        # print("losses.shape", losses.shape)
-        # print("losses", losses)
-
-        # if full_target is not None:
-        # print(full_target.shape)
-
-
-        # For logging: sum of ratio * advantage for chosen/rejected
-        # chosen_rewards_sum = (obj_unclipped * preference_labels_chunk).sum()
-        # rejected_rewards_sum = (obj_unclipped * (~preference_labels_chunk)).sum()
-
-        # Return mean loss over the batch
-        # return losses.sum() / (full_target.shape[0]), chosen_rewards_sum, rejected_rewards_sum
-
-        # print("losses", losses.sum() / (full_target.shape[0]))
-        # print("sum_loss", (losses.sum()).shape)
-        # print("losses.shape", losses.shape)
         return losses.mean()
 
 
