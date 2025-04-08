@@ -17,14 +17,11 @@ class PolicyLoss(nn.Module):
         advantages: torch.Tensor,
         action_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # print("advantages", advantages)
-        ratio = (log_probs - old_log_probs).exp()
+        ratio = (log_probs - old_log_probs + 1e-8).exp()
+
         surr1 = ratio * advantages
-        # print("ratio:", ratio)
-        # print("surr1", surr1)
         surr2 = ratio.clamp(1 - self.clip_eps, 1 + self.clip_eps) * advantages
         loss = -torch.min(surr1, surr2)
-        # print("loss", loss.shape)
         loss = masked_mean(loss, action_mask, dim=-1).mean()
         return loss
 
@@ -88,6 +85,7 @@ def log_probs_from_logits(logits: torch.Tensor, labels: torch.Tensor, temperatur
         logits.div_(temperature)
     batch_dim = logits.shape[:-1]
     last_dim = logits.shape[-1]
+    # import ipdb;ipdb.set_trace()
     logits_labels = torch.gather(logits, dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
     logsumexp_values = _logsumexp_by_chunk(logits.reshape(-1, last_dim))
     logsumexp_values = logsumexp_values.view(*batch_dim)
