@@ -7,7 +7,7 @@
 - **FusedLinearPPOLoss**  
   来自 `liger-kernel` 的 PPO loss 实现，采用 FusedLinear 的方式进行优化，加速前向与反向传播过程, 具体实现可参考https://aicarrier.feishu.cn/wiki/C3Uhwc2uDiCT6DkcgJsczatGn9i
 
-- **liger_ppo_test.py** 
+- **liger_ppo_test.py**  
   用于测试 `liger-kernel` 中的 `FusedLinearPPOLoss` 是否功能正确。适合用作基础单元测试验证。
 
 - **openrlhf_ppo_loss.py**  
