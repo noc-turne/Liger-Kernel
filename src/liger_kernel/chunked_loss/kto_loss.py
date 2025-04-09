@@ -52,6 +52,8 @@ class LigerFusedLinearKTOFunction(LigerFusedLinearUnpairedPreferenceBase):
         Returns:
             - loss: The KTO loss value
         """
+        print(log_prob_chunk.shape)
+        print(log_prob_chunk)
         if ref_log_prob_chunk is not None:
             logratios_chunk = log_prob_chunk - ref_log_prob_chunk
         else:
@@ -65,6 +67,8 @@ class LigerFusedLinearKTOFunction(LigerFusedLinearUnpairedPreferenceBase):
         rewards = beta * logratios_chunk
         chosen_rewards_sum = (rewards * preference_labels_chunk.unsqueeze(1)).sum()
         rejected_rewards_sum = (rewards * (~preference_labels_chunk).unsqueeze(1)).sum()
+
+        print("losses", losses.sum() / (full_target.shape[0]))
 
         return losses.sum() / (full_target.shape[0]), chosen_rewards_sum, rejected_rewards_sum
 

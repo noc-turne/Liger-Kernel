@@ -42,7 +42,7 @@ class LigerFusedLinearPPOFunction(LigerFusedLinearUnpairedPreferenceBase):
             ratio_chunk = torch.exp(log_prob_chunk)
 
         # Advantage is +1 if chosen, -1 if rejected
-        advantage_chunk = torch.where(preference_labels_chunk, 1.0, -0.01).unsqueeze(-1)
+        advantage_chunk = torch.where(preference_labels_chunk, 1.0, -1.0).unsqueeze(-1)
 
         # Unclipped objective
         obj_unclipped = ratio_chunk * advantage_chunk
